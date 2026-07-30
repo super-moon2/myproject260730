@@ -8,15 +8,15 @@ import plotly.graph_objects as go
 # 1. 스트림릿 페이지 기본 설정
 # -----------------------------------------------------------------------------
 st.set_page_config(
-    page_title="전국 시도/시군구 17~19세 청소년 인구 지도",
+    page_title="전국 시도/시군구 고등학생(17~19세) 청소년 인구 지도",
     page_icon="🗺️",
     layout="wide"
 )
 
-st.title("🗺️ 전국 시도/시군구 17세~19세 인구 비율 지형도")
+st.title("🗺️ 전국 시도/시군구 고등학생(17세~19세) 인구 비율 지형도")
 st.markdown("""
-* 전국 읍·면·동 인구 데이터를 바탕으로 시군구별 **17세~19세 인구 비율**을 시각화합니다.
-* 상단에서 **시도**를 선택하면 해당 지역만 지도에 색상이 칠해지며, 하단의 **상위/하위 지역 표**도 함께 연동됩니다.
+* 전국 읍·면·동 인구 데이터를 바탕으로 시군구별 **고등학생(17세~19세) 인구 비율**을 시각화합니다.
+* 상단에서 **시도**를 선택하면 해당 지역만 지도에 색상이 칠해지며, **지도가 해당 지역으로 자동 확대**됩니다.
 """)
 
 # -----------------------------------------------------------------------------
@@ -93,7 +93,60 @@ else:
     df_map["색상구간"] = df_map["비율구간"].astype(str)
 
 # -----------------------------------------------------------------------------
-# 4. 단계구분도(Choropleth) 생성 및 경계선(시군구 1pt, 시도 3pt) 설정
+# 4. 지도 중심좌표(Center) 및 확대 기본값(Zoom) 계산
+# -----------------------------------------------------------------------------
+# 기본 전국 화면 설정
+center_lat, center_lon = 35.8, 127.8
+zoom_level = 6.2
+
+# 특정 시도가 선택된 경우 해당 지역의 GeoJSON 좌표로 중심점 및 줌 레벨 계산
+if selected_sido:
+    selected_lats = []
+    selected_lons = []
+    
+    for feature in geojson_kr["features"]:
+        sido_name = feature["properties"].get("시도", "")
+        if sido_name in selected_sido:
+            geom = feature["geometry"]
+            coords = geom["coordinates"]
+            
+            all_coords = []
+            if geom["type"] == "Polygon":
+                all_coords = coords[0]
+            elif geom["type"] == "MultiPolygon":
+                for poly in coords:
+                    all_coords.extend(poly[0])
+            
+            for c in all_coords:
+                selected_lons.append(c[0])
+                selected_lats.append(c[1])
+                
+    if selected_lats and selected_lons:
+        min_lat, max_lat = min(selected_lats), max(selected_lats)
+        min_lon, max_lon = min(selected_lons), max(selected_lons)
+        
+        # 바운딩 박스의 중심 계산
+        center_lat = (min_lat + max_lat) / 2
+        center_lon = (min_lon + max_lon) / 2
+        
+        # 지역의 위경도 영역 크기(Span)에 따라 적절한 Zoom 레벨 동적 산출
+        lat_span = max_lat - min_lat
+        lon_span = max_lon - min_lon
+        max_span = max(lat_span, lon_span)
+        
+        if max_span < 0.3:
+            zoom_level = 9.8    # 서울/부산 등 좁은 영역
+        elif max_span < 0.8:
+            zoom_level = 8.8    # 대전/광주/인천 등
+        elif max_span < 1.5:
+            zoom_level = 7.8    # 충남/전북 등 일반 도 단위
+        elif max_span < 2.5:
+            zoom_level = 7.2    # 경기도/강원도/경북 등 넓은 도 단위
+        else:
+            zoom_level = 6.5    # 여러 시도 다중 선택 시
+
+# -----------------------------------------------------------------------------
+# 5. 단계구분도(Choropleth) 생성 및 경계선(시군구 1pt, 시도 3pt) 설정
 # -----------------------------------------------------------------------------
 color_discrete_map = {
     "1.5% 미만": "#f2f0f7",
@@ -108,7 +161,7 @@ category_order = ["1.5% 미만", "1.5% 이상 ~ 2.0% 미만", "2.0% 이상 ~ 2.5
 if "선택 안됨" in df_map["색상구간"].values:
     category_order.append("선택 안됨")
 
-# 4-1. 기본 시군구 단계구분도 (시군구 경계선 1pt 적용)
+# 5-1. 기본 시군구 단계구분도
 fig = px.choropleth_mapbox(
     df_map,
     geojson=geojson_kr,
@@ -118,8 +171,8 @@ fig = px.choropleth_mapbox(
     color_discrete_map=color_discrete_map,
     category_orders={"색상구간": category_order},
     mapbox_style="white-bg",
-    center={"lat": 35.8, "lon": 127.8},
-    zoom=6.2,
+    center={"lat": center_lat, "lon": center_lon}, # 계산된 중심점 적용
+    zoom=zoom_level,                               # 계산된 줌 레벨 적용
     hover_name="시군구",
     hover_data={
         "sigungu_code": False,
@@ -139,7 +192,7 @@ fig.update_traces(
     marker_line_color="#888888"
 )
 
-# 4-2. 시도 경계선을 3pt 두께로 굵게 표시
+# 5-2. 시도 경계선을 3pt 두께로 굵게 표시
 for feature in geojson_kr["features"]:
     props = feature["properties"]
     sido_name = props.get("시도", "")
@@ -168,7 +221,7 @@ for feature in geojson_kr["features"]:
             )
         )
 
-# 4-3. 지도 상 시군구 이름 텍스트 추가 (검은색 50% 적용: rgba(0, 0, 0, 0.5))
+# 5-3. 지도 상 시군구 이름 텍스트 추가 (검은색 50% 적용: rgba(0, 0, 0, 0.5))
 label_lats, label_lons, label_texts = [], [], []
 
 for feature in geojson_kr["features"]:
@@ -220,7 +273,7 @@ fig.update_layout(
 st.plotly_chart(fig, use_container_width=True)
 
 # -----------------------------------------------------------------------------
-# 5. 선택 조건에 연동되는 하단 상위/하위 지역 표 (시도 선택 시 5개, 전체일 때 10개)
+# 6. 선택 조건에 연동되는 하단 상위/하위 지역 표 (시도 선택 시 5개, 전체일 때 10개)
 # -----------------------------------------------------------------------------
 st.markdown("---")
 
