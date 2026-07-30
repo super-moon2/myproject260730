@@ -8,14 +8,14 @@ import plotly.graph_objects as go
 # 1. 스트림릿 페이지 기본 설정
 # -----------------------------------------------------------------------------
 st.set_page_config(
-    page_title="전국 시도/시군구 17~19세 청소년 인구 지도",
+    page_title="전국 시도/시군구 고등학생(17~19세) 청소년 인구 지도",
     page_icon="🗺️",
     layout="wide"
 )
 
-st.title("🗺️ 전국 시도/시군구 17세~19세 인구 비율 지형도")
+st.title("🗺️ 전국 시도/시군구 고등학생 인구 비율 지형도")
 st.markdown("""
-* 전국 읍·면·동 인구 데이터를 바탕으로 시군구별 **17세~19세 인구 비율**을 시각화합니다.
+* 전국 읍·면·동 인구 데이터를 바탕으로 시군구별 **고등학생 인구 비율**을 시각화합니다.
 * 상단에서 **연도**와 **시도**를 선택하면 해당 연도 및 지역의 데이터가 지도에 자동 반영·확대됩니다.
 """)
 
@@ -306,9 +306,9 @@ rename_cols = {
 col1, col2 = st.columns(2)
 
 with col1:
-    st.markdown(f"##### 🔝 17세~19세 비율 가장 높은 지역 Top {show_n}")
+    st.markdown(f"##### 🔝 고등학생 비율 가장 높은 지역 Top {show_n}")
     st.dataframe(top_df.rename(columns=rename_cols), use_container_width=True)
 
 with col2:
-    st.markdown(f"##### 🔻 17세~19세 비율 가장 낮은 지역 Bottom {show_n}")
+    st.markdown(f"##### 🔻 고등학생 비율 가장 낮은 지역 Bottom {show_n}")
     st.dataframe(bottom_df.rename(columns=rename_cols), use_container_width=True)
