@@ -16,7 +16,7 @@ st.set_page_config(
 st.title("🗺️ 전국 시도/시군구 17세~19세 인구 비율 지형도")
 st.markdown("""
 * 전국 읍·면·동 인구 데이터를 바탕으로 시군구별 **17세~19세 인구 비율**을 시각화합니다.
-* 상단에서 **시도**를 선택하면 해당 지역만 지도에 색상이 칠해지며, 하단의 **상위/하위 10개 지역 표**도 함께 연동됩니다.
+* 상단에서 **시도**를 선택하면 해당 지역만 지도에 색상이 칠해지며, 하단의 **상위/하위 지역 표**도 함께 연동됩니다.
 """)
 
 # -----------------------------------------------------------------------------
@@ -139,14 +139,12 @@ fig.update_traces(
     marker_line_color="#888888"
 )
 
-# 4-2. 시도 경계선을 3pt 두께로 굵게 표시하기 위한 트레이스 생성
-# GeoJSON 내의 좌표들을 시도별로 그룹화하여 외곽선 레이어를 별도로 얹습니다.
+# 4-2. 시도 경계선을 3pt 두께로 굵게 표시
 for feature in geojson_kr["features"]:
     props = feature["properties"]
     sido_name = props.get("시도", "")
     geom = feature["geometry"]
     
-    # 선택된 시도가 있거나 전체 보기일 때 시도 외곽선 3pt 도출
     border_color = "#111111" if (not selected_sido or sido_name in selected_sido) else "#aaaaaa"
     
     coords_list = []
@@ -170,7 +168,7 @@ for feature in geojson_kr["features"]:
             )
         )
 
-# 4-3. 시군구 이름 검정색 50% 텍스트 표시
+# 4-3. 지도 상 시군구 이름 텍스트 추가 (검은색 50% 적용: rgba(0, 0, 0, 0.5))
 label_lats, label_lons, label_texts = [], [], []
 
 for feature in geojson_kr["features"]:
@@ -198,7 +196,7 @@ fig.add_trace(
         lon=label_lons,
         mode="text",
         text=label_texts,
-        textfont=dict(size=9, color="rgba(0, 0, 0, 0.5)"),
+        textfont=dict(size=9, color="rgba(0, 0, 0, 0.5)"), # 검은색 50% 투명도
         hoverinfo="skip",
         showlegend=False
     )
@@ -222,28 +220,35 @@ fig.update_layout(
 st.plotly_chart(fig, use_container_width=True)
 
 # -----------------------------------------------------------------------------
-# 5. 선택된 시도에 연동되는 하단 상위/하위 10개 지역 표
+# 5. 선택 조건에 연동되는 하단 상위/하위 지역 표 (시도 선택 시 5개, 전체일 때 10개)
 # -----------------------------------------------------------------------------
 st.markdown("---")
 
-# 선택 여부에 따른 표용 데이터 필터링
+# 시도 선택 여부에 따른 데이터 필터링 및 추출 개수 지정
 if selected_sido:
     df_filtered = df_sigungu[df_sigungu["시도"].isin(selected_sido)].copy()
     sido_label = ", ".join(selected_sido)
-    st.subheader(f"📊 [{sido_label}] 지역 내 17세~19세 인구 비율 상위/하위 지역")
+    target_count = 5  # 시도가 선택되었을 때 5개 표시
+    st.subheader(f"📊 [{sido_label}] 지역 내 17세~19세 인구 비율 상위/하위 {target_count}개 지역")
 else:
     df_filtered = df_sigungu.copy()
-    st.subheader("📊 전국 기준 17세~19세 인구 비율 상위/하위 10개 지역")
+    target_count = 10 # 전체 지역일 때 10개 표시
+    st.subheader(f"📊 전국 기준 17세~19세 인구 비율 상위/하위 {target_count}개 지역")
 
 # 비율 기준 내림차순 정렬
 df_sorted = df_filtered.sort_values(by="17_19세비율", ascending=False)
 
-# 선택 지역 수가 10개 미만일 경우 전체 출력 처리
-top_n = min(10, len(df_sorted))
+# 데이터 개수가 원하는 개수보다 적을 경우 안전하게 최댓값 맞춤
+show_n = min(target_count, len(df_sorted))
 
-top10 = df_sorted.head(top_n)[["시도", "시군구", "총인구", "청소년인구", "17_19세비율"]].reset_index(drop=True)
-bottom10 = df_sorted.tail(top_n).iloc[::-1][["시도", "시군구", "총인구", "청소년인구", "17_19세비율"]].reset_index(drop=True)
+top_df = df_sorted.head(show_n)[["시도", "시군구", "총인구", "청소년인구", "17_19세비율"]].reset_index(drop=True)
+bottom_df = df_sorted.tail(show_n).iloc[::-1][["시도", "시군구", "총인구", "청소년인구", "17_19세비율"]].reset_index(drop=True)
 
+# 인덱스를 1번부터 시작하도록 변경
+top_df.index = range(1, len(top_df) + 1)
+bottom_df.index = range(1, len(bottom_df) + 1)
+
+# 열 이름 한글화
 rename_cols = {
     "총인구": "총 인구수(명)",
     "청소년인구": "17~19세 인구수(명)",
@@ -253,9 +258,9 @@ rename_cols = {
 col1, col2 = st.columns(2)
 
 with col1:
-    st.markdown(f"##### 🔝 17세~19세 비율 가장 높은 지역 Top {top_n}")
-    st.dataframe(top10.rename(columns=rename_cols), use_container_width=True)
+    st.markdown(f"##### 🔝 17세~19세 비율 가장 높은 지역 Top {show_n}")
+    st.dataframe(top_df.rename(columns=rename_cols), use_container_width=True)
 
 with col2:
-    st.markdown(f"##### 🔻 17세~19세 비율 가장 낮은 지역 Bottom {top_n}")
-    st.dataframe(bottom10.rename(columns=rename_cols), use_container_width=True)
+    st.markdown(f"##### 🔻 17세~19세 비율 가장 낮은 지역 Bottom {show_n}")
+    st.dataframe(bottom_df.rename(columns=rename_cols), use_container_width=True)
